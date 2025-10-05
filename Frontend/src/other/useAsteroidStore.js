@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import axios from "axios";
 
-const BACKEND_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const BACKEND_BASE = import.meta.env.VITE_API_BASE || "/api/asteroids";
 
 const useAsteroidStore = create((set, get) => ({
   // --- state ---
