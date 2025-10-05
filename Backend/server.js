@@ -12,7 +12,7 @@ app.use(express.json());
 
 // NASA NEO API
 const NASA_API_URL = 'https://api.nasa.gov/neo/rest/v1/neo/browse';
-const NASA_API_KEY = 'DEMO_KEY';
+const NASA_API_KEY = 'msAY493IhVmfHxJVHSQQDBjiqmM55NbOpsMe02gx';
 
 // Cache storage
 let cachedAsteroids = [];
