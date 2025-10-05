@@ -2,7 +2,7 @@
 import { create } from "zustand";
 import axios from "axios";
 
-const BACKEND_BASE = import.meta.env.VITE_API_BASE || "/api/asteroids";
+const BACKEND_BASE = import.meta.env.VITE_API_BASE || "https://schwarzschild-nej4.vercel.app/api/asteroids" ;
 
 const useAsteroidStore = create((set, get) => ({
   // --- state ---
