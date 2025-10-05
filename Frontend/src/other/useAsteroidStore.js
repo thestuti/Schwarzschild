@@ -1,99 +1,124 @@
-// backend/server.js
-import express from 'express';
-import axios from 'axios';
-import cors from 'cors';
+// src/other/useAsteroidStore.js
+import { create } from "zustand";
+import axios from "axios";
 
-const app = express();
-const PORT = 5000;
+const BACKEND_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 
-// Middlewares
-app.use(cors());
-app.use(express.json());
+const useAsteroidStore = create((set, get) => ({
+  // --- state ---
+  type: "C",
+  speed: 0,
+  distance: 0,
+  size: 1,
+  damage: 0,
+  launched: false,
+  xdistance: 100,
+  ydistance: 50,
+  zdistance: 0,
+  launched2: true,
+  clicked: true,
+  crashed: false,
+  orbitpage: true,
 
-// NASA NEO API
-const NASA_API_URL = 'https://api.nasa.gov/neo/rest/v1/neo/browse';
-const NASA_API_KEY = 'msAY493IhVmfHxJVHSQQDBjiqmM55NbOpsMe02gx';
+  // fetched data
+  asteroids: [],
+  selectedAsteroid: null,
+  loadingAsteroids: false,
 
-// Cache storage
-let cachedAsteroids = [];
+  // --- setters ---
+  setType: (type) => set({ type }),
+  setSpeed: (speed) => set({ speed }),
+  setDistance: (distance) => set({ distance }),
+  setSize: (size) => set({ size }),
+  setDamage: (damage) => set({ damage }),
+  setLaunched: (launched) => set({ launched }),
+  setX: (xdistance) => set({ xdistance }),
+  setY: (ydistance) => set({ ydistance }),
+  setZ: (zdistance) => set({ zdistance }),
+  setLaunched2: (launched2) => set({ launched2 }),
+  setClicked: (clicked) => set({ clicked }),
+  setCrashed: (crashed) => set({ crashed }),
+  setOrbitpage: (orbitpage) => set({ orbitpage }),
 
-/**
- * Fetch and cache asteroid data from NASA NEO API at startup
- */
-async function loadAsteroids() {
-  try {
-    console.log('⏳ Fetching asteroid data from NASA NEO API...');
-    
-    let allAsteroids = [];
-    let page = 0;
-    let totalPages = 1;
+  // --- run simulation ---
+  runSimulation: () => {
+    const s = get();
+    const speed = Number(s.speed) || 0;
+    const size = Number(s.size) || 0;
+    const computedDistance =
+      Number(s.distance) ||
+      Math.sqrt(
+        (Number(s.xdistance) || 0) ** 2 +
+          (Number(s.ydistance) || 0) ** 2 +
+          (Number(s.zdistance) || 0) ** 2
+      ) ||
+      1;
 
-    // Loop through pages (limit to first 5 pages to avoid huge fetch)
-    while (page < totalPages && page < 5) {
-      const response = await axios.get(`${NASA_API_URL}?page=${page}&size=20&api_key=${NASA_API_KEY}`);
-      const data = response.data;
+    const typeMultiplier =
+      s.type === "A" ? 1.2 : s.type === "B" ? 1.5 : 1;
+    const damage =
+      ((speed * size) / Math.max(computedDistance, 1)) *
+      typeMultiplier;
 
-      totalPages = data.page.total_pages;
+    set({
+      damage,
+      launched: true,
+      launched2: !s.launched2,
+    });
 
-      const mapped = data.near_earth_objects.map(item => ({
-        id: item.id,
-        name: item.name,
-        closeApproachDate: item.close_approach_data?.[0]?.close_approach_date || 'N/A',
-        relativeVelocity: parseFloat(item.close_approach_data?.[0]?.relative_velocity?.kilometers_per_second || 0),
-        missDistance: parseFloat(item.close_approach_data?.[0]?.miss_distance?.astronomical || 0),
-        diameter: item.estimated_diameter?.kilometers?.estimated_diameter_max || 1, // km
-        orbitBody: item.orbital_data?.orbit_class?.orbit_class_type || 'N/A'
-      }));
+    console.log("runSimulation →", {
+      speed,
+      size,
+      computedDistance,
+      damage,
+    });
 
-      allAsteroids = allAsteroids.concat(mapped);
-      page++;
+    return damage;
+  },
+
+  // --- fetch asteroid list ---
+  fetchAsteroids: async () => {
+    set({ loadingAsteroids: true });
+    try {
+      const res = await axios.get(`${BACKEND_BASE}/api/asteroids`);
+      set({ asteroids: res.data || [], loadingAsteroids: false });
+      console.log(
+        `fetchAsteroids: loaded ${res.data?.length ?? 0}`
+      );
+    } catch (err) {
+      console.error("fetchAsteroids error", err);
+      set({ loadingAsteroids: false });
     }
+  },
 
-    cachedAsteroids = allAsteroids;
-    console.log(`✅ Cached ${cachedAsteroids.length} asteroids from NASA NEO API`);
-  } catch (error) {
-    console.error('❌ Error fetching NASA NEO API data:', error.message);
-  }
-}
+  // --- fetch details for a selected asteroid ---
+  fetchAsteroidDetails: async (name) => {
+    if (!name) return;
+    try {
+      const res = await axios.get(
+        `${BACKEND_BASE}/api/asteroids/${encodeURIComponent(name)}`
+      );
+      const data = res.data;
+      const size = Number(data.size) || 1;
 
-// Initial fetch on server start
-await loadAsteroids();
+      set({
+        selectedAsteroid: data,
+        speed: Number(data.speed) || 0,
+        size,
+        xdistance: 100,
+        ydistance: 50,
+        zdistance: 0,
+        distance: Number(data.missDistance) || 0,
+      });
 
-/**
- * GET /api/asteroids
- * Returns the full cached asteroid list
- */
-app.get('/api/asteroids', (req, res) => {
-  res.json(cachedAsteroids);
-});
+      console.log("fetchAsteroidDetails →", name, {
+        speed: data.speed,
+        size,
+      });
+    } catch (err) {
+      console.error("fetchAsteroidDetails error", err);
+    }
+  },
+}));
 
-/**
- * GET /api/asteroids/:name
- * Returns details for the selected asteroid
- */
-app.get('/api/asteroids/:name', (req, res) => {
-  const { name } = req.params;
-  const asteroid = cachedAsteroids.find(a => a.name === name);
-
-  if (!asteroid) {
-    return res.status(404).json({ error: 'Asteroid not found' });
-  }
-
-  // Use diameter/2 as size (radius)
-  const size = asteroid.diameter / 2;
-
-  res.json({
-    name: asteroid.name,
-    speed: asteroid.relativeVelocity,  
-    size,
-    position: { x: 100, y: 50, z: 0 }, // constant position
-    orbitBody: asteroid.orbitBody,
-    closeApproachDate: asteroid.closeApproachDate,
-    missDistance: asteroid.missDistance
-  });
-});
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Backend running at http://localhost:${PORT}`);
-});
+export default useAsteroidStore;
